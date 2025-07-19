@@ -1,5 +1,5 @@
 use core::hash;
-use std::{io::stdout, time::{Duration, SystemTime}};
+use std::{{io::{stdout,Error}, time}, time::{Duration, SystemTime, Instant}};
 
 use crossterm::{cursor::MoveTo, event::{Event::{Key, Resize}, KeyCode, KeyEventKind}, execute, style::Print, terminal::{window_size, Clear, WindowSize}};
 use rand::Rng;
@@ -7,9 +7,9 @@ use rand::Rng;
 extern crate crossterm;
 extern crate rand;
 
-const GAMESIZE: usize = 200;
+const GAMESIZE: usize = 600;
 const DENSITY: f64 = 0.1;
-const GAMESPEED: i32 = 1;
+const GAMESPEED: u128 = 1000*25;
 
 const DISP_CHAR: char = '0';
 
@@ -22,7 +22,7 @@ pub struct GameState {
     view_width: usize,
     view_height: usize,
     running: bool,
-    speed: i32,
+    update_delay_micros: u128,
     changes_drawn: bool,
     current_command: InputCommand,
 }
@@ -66,7 +66,7 @@ fn initialize_gamestate(view_height: usize, view_width: usize) -> GameState {
         view_width: view_width,
         view_height: view_height,
         running: true,
-        speed: GAMESPEED,
+        update_delay_micros: GAMESPEED,
         changes_drawn: false,
         current_command: InputCommand::Pass,
     };
@@ -94,7 +94,7 @@ fn poll_input() -> Result<InputCommand, std::io::Error> {
                     }
                 }
             },
-            crossterm::event::Event::Resize(width,height) => return Ok(InputCommand::Resize),
+            crossterm::event::Event::Resize(_width,_height) => return Ok(InputCommand::Resize),
             _ => ()
         }
     }
@@ -157,6 +157,10 @@ fn draw_screen(gs: &GameState) -> Result<(), std::io::Error> {
     //draw view_y -> view_y + height
 
     let mut outbuff: Vec<char> = vec![];
+
+    if gs.view_width > GAMESIZE || gs.view_height > GAMESIZE {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Window too large"));
+    }
 
     for i in 0..gs.view_height {
         for j in 0..gs.view_width {
@@ -238,27 +242,35 @@ fn main() -> Result<(), std::io::Error> {
     let mut gamestate = initialize_gamestate(view_height, view_width);
     
     // Game Loop exited with the running boolean, currently in execute_input
+    let mut last_update_time = Instant::now();
     loop {
+        if last_update_time.elapsed().as_micros() > gamestate.update_delay_micros {
+            // Input Reading and Enforcing
+            gamestate.current_command = poll_input()?;
+            execute_input(&mut gamestate);
 
-        // Input Reading and Enforcing
-        let input = poll_input()?;
-        gamestate.current_command = input;
-        execute_input(&mut gamestate);
-
-        if (gamestate.playing) {
-            update_gameboard(&mut gamestate);
-        }
-
-        // Display Stuff
-        if gamestate.changes_drawn == false {
-            if gamestate.current_command == InputCommand::Resize {
-                let (view_height, view_width) = get_view_size()?;
-                gamestate.view_height = view_height;
-                gamestate.view_width = view_width;
-                gamestate.current_command = InputCommand::Pass;
+            if gamestate.playing {
+                update_gameboard(&mut gamestate);
             }
-            draw_screen(&gamestate)?;
-            gamestate.changes_drawn = true;
+
+            // Display Stuff
+            if gamestate.changes_drawn == false {
+                if gamestate.current_command == InputCommand::Resize {
+                    let (view_height, view_width) = get_view_size()?;
+                    gamestate.view_height = view_height;
+                    gamestate.view_width = view_width;
+                    gamestate.current_command = InputCommand::Pass;
+                }
+                match draw_screen(&gamestate) {
+                    Err(_e) => {
+                        gamestate.running = false;
+                    },
+                    _ => {
+                        gamestate.changes_drawn = true;
+                    }
+                }
+            }
+            last_update_time = Instant::now();
         }
 
         // Loop Killer
