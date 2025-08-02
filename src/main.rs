@@ -9,7 +9,7 @@ extern crate rand;
 
 const GAMESIZE: usize = 600;
 const DENSITY: f64 = 0.1;
-const GAMESPEED: u128 = 1000*25;
+const GAMESPEED: u128 = 1000*100; //update delay in microseconds
 
 const DISP_CHAR: char = '0';
 
@@ -108,7 +108,7 @@ fn execute_input(gs: &mut GameState) {
         },
 
         InputCommand::Pause => {
-            gs.needs_update = true;
+            gs.playing = !gs.playing;
         },
         InputCommand::Up | InputCommand::Left | InputCommand::Down | InputCommand::Right => {
             move_command(gs);
@@ -244,33 +244,34 @@ fn main() -> Result<(), std::io::Error> {
     // Game Loop exited with the running boolean, currently in execute_input
     let mut last_update_time = Instant::now();
     loop {
-        if last_update_time.elapsed().as_micros() > gamestate.update_delay_micros {
-            // Input Reading and Enforcing
-            gamestate.current_command = poll_input()?;
-            execute_input(&mut gamestate);
-
-            if gamestate.playing {
-                update_gameboard(&mut gamestate);
-            }
-
-            // Display Stuff
-            if gamestate.changes_drawn == false {
-                if gamestate.current_command == InputCommand::Resize {
-                    let (view_height, view_width) = get_view_size()?;
-                    gamestate.view_height = view_height;
-                    gamestate.view_width = view_width;
-                    gamestate.current_command = InputCommand::Pass;
-                }
-                match draw_screen(&gamestate) {
-                    Err(_e) => {
-                        gamestate.running = false;
-                    },
-                    _ => {
-                        gamestate.changes_drawn = true;
-                    }
-                }
-            }
+		// Input Reading and Enforcing
+        gamestate.current_command = poll_input()?;
+        execute_input(&mut gamestate);
+    
+        if
+        last_update_time.elapsed().as_micros() > gamestate.update_delay_micros
+        && gamestate.playing
+        {
+            update_gameboard(&mut gamestate);
             last_update_time = Instant::now();
+        }
+
+        // Display Stuff
+        if gamestate.changes_drawn == false {
+            if gamestate.current_command == InputCommand::Resize {
+                let (view_height, view_width) = get_view_size()?;
+                gamestate.view_height = view_height;
+                gamestate.view_width = view_width;
+                gamestate.current_command = InputCommand::Pass;
+            }
+            match draw_screen(&gamestate) {
+                Err(_e) => {
+                    gamestate.running = false;
+                },
+                _ => {
+                    gamestate.changes_drawn = true;
+                }
+            }
         }
 
         // Loop Killer
