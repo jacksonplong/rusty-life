@@ -8,7 +8,7 @@ extern crate crossterm;
 extern crate rand;
 
 const GAMESIZE: usize = 600;
-const DENSITY: f64 = 0.1;
+const DENSITY: f64 = 0.05;
 const GAMESPEED: u128 = 1000*100; //update delay in microseconds
 
 const DISP_CHAR: char = '0';
@@ -281,6 +281,7 @@ fn main() -> Result<(), std::io::Error> {
     }
 
     // This should run before exiting to the terminal.
+    execute!(stdout(), Clear(crossterm::terminal::ClearType::All))?;
     let _ = crossterm::terminal::disable_raw_mode();
     return Ok(());
 }
