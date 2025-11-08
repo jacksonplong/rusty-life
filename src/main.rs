@@ -1,15 +1,15 @@
 use core::hash;
-use std::{{io::{stdout,Error}, time}, time::{Duration, SystemTime, Instant}};
+use std::{{io::{stdout,Error,Write}, time}, time::{Duration, SystemTime, Instant}};
 
-use crossterm::{cursor::MoveTo, event::{Event::{Key, Resize}, KeyCode, KeyEventKind}, execute, style::Print, terminal::{window_size, Clear, WindowSize}};
+use crossterm::{cursor::{MoveTo,Show,Hide}, event::{Event::{Key, Resize}, KeyCode, KeyEventKind}, execute, style::{Print, ResetColor}, terminal::{window_size, Clear, WindowSize, self, EnterAlternateScreen, LeaveAlternateScreen}};
 use rand::Rng;
 
 extern crate crossterm;
 extern crate rand;
 
 const GAMESIZE: usize = 600;
-const DENSITY: f64 = 0.05;
-const GAMESPEED: u128 = 1000*100; //update delay in microseconds
+const DENSITY: f64 = 0.07;
+const GAMESPEED: u128 = 1200*100; //update delay in microseconds
 
 const DISP_CHAR: char = '0';
 
@@ -82,6 +82,7 @@ fn poll_input() -> Result<InputCommand, std::io::Error> {
                     match key_event.code {
                         KeyCode::Esc => return Ok(InputCommand::Quit),
                         KeyCode::Char(' ') => return Ok(InputCommand::Pause),
+                        KeyCode::Char('q') => return Ok(InputCommand::Quit),
                         KeyCode::Up => return Ok(InputCommand::Up),
                         KeyCode::Left => return Ok(InputCommand::Left),
                         KeyCode::Down => return Ok(InputCommand::Down),
@@ -146,7 +147,7 @@ fn move_command(gs: &mut GameState) {
             if gs.view_x < GAMESIZE as usize - gs.view_width {
                 gs.view_x += 1;
                 gs.changes_drawn = false;
-            }
+                }
         },
         _ => (),
     }
@@ -234,10 +235,26 @@ fn update_gameboard(gs: &mut GameState) {
     gs.needs_update = false;
 }
 
+struct CleanupGuard;
+
+impl Drop for CleanupGuard {
+    fn drop(&mut self) {
+        let _ = terminal::disable_raw_mode();
+        let mut out = stdout();
+        let _ = execute!(out, ResetColor, Show, LeaveAlternateScreen);
+        let _ = execute!(out, ResetColor);
+        let _ = execute!(out, Show);
+        let _ = execute!(out, LeaveAlternateScreen);
+    }
+}
+
 fn main() -> Result<(), std::io::Error> {
 
     crossterm::terminal::enable_raw_mode()?;
-
+    execute!(stdout(), EnterAlternateScreen, Hide)?;
+    
+    let _guard = CleanupGuard;
+    
     let (view_height, view_width) = get_view_size()?;
     let mut gamestate = initialize_gamestate(view_height, view_width);
     
@@ -281,7 +298,5 @@ fn main() -> Result<(), std::io::Error> {
     }
 
     // This should run before exiting to the terminal.
-    execute!(stdout(), Clear(crossterm::terminal::ClearType::All))?;
-    let _ = crossterm::terminal::disable_raw_mode();
     return Ok(());
 }
